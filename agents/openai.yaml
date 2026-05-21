@@ -1,0 +1,7 @@
+interface:
+  display_name: "Review/Fix Loop"
+  short_description: "Run one repo review and fix pass"
+  default_prompt: "Use $review-fix-loop to run one review/fix loop in this repository, or start continuous mode if I ask for repeated sessions. Respect any review/fix prompt overrides in `.codex/review-loop.prompts.md`."
+
+policy:
+  allow_implicit_invocation: true

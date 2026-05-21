@@ -34,6 +34,8 @@ The continuous loop stops after `max_loop` total passes. A request like "max loo
 
 Continuous mode defaults to Codex automation, so each pass should run as a fresh automation job. It only runs multiple passes inside the current chat when you explicitly ask for current-session execution.
 
+`max_loop` is only the cap. It is not a cadence. With the default config, `max round 3` alone should not create an hourly job.
+
 The skill resolves `max_loop` in this order:
 
 1. Current user instructions for the run.
@@ -56,7 +58,7 @@ Config files use simple `key: value` lines:
 max_loop: 10
 state_dir: tmp
 continuous_mode: automation
-automation_cadence: hourly
+automation_cadence: require-explicit
 ```
 
 Use the Codex config for your personal default across repos, and the repo config when a project needs a different cap or state location.
@@ -93,7 +95,11 @@ Or simply provide a max round count:
 Use $review-fix-loop with max round 3.
 ```
 
-With the default config, that should create or update an hourly automation instead of running three passes in the current chat.
+With the default config, that should ask for a cadence instead of creating an hourly automation. To create an active hourly automation, say:
+
+```text
+Use $review-fix-loop with max round 3, hourly.
+```
 
 The skill records state in the resolved `review-loop.md`, so later jobs can reuse the same loop branch and PR instead of starting over. With `state_dir: tmp`, the target repo does not need `.codex`.
 

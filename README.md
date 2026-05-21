@@ -1,6 +1,6 @@
 # codex-review-loop
 
-A Codex skill for running one repository review/fix pass at a time. It is designed for repeated sessions: review for real P0/P1 issues, fix one highest-severity issue when found, add a regression test, commit the fix, and record durable state in `.codex/review-loop.md`.
+A Codex skill for running repository review/fix passes. It reviews for real P0/P1 issues, fixes one highest-severity issue when found, adds a regression test, commits the fix, and records durable loop state either in the repo or in tmp.
 
 ## Install
 
@@ -21,32 +21,45 @@ Use $review-fix-loop to run one review/fix loop in this repository.
 
 - Runs exactly one review/fix pass by default.
 - Gates actionable findings to real P0/P1 issues only.
-- Tracks loop history in `.codex/review-loop.md`.
+- Tracks loop history in the resolved `review-loop.md`.
 - Commits fixes after tests pass.
 - Supports continuous mode through Codex automations instead of an in-session infinite loop.
 - Supports custom review and fix prompt overrides per repository.
 - Supports configurable max loop counts from user-level and repo-level config.
+- Supports tmp-backed loop state so target repos do not need an internal `.codex` directory.
 
 ## Configuration
 
-The continuous loop stops after `max_loop` total passes. The skill resolves `max_loop` in this order:
+The continuous loop stops after `max_loop` total passes. A request like "max loop 3", "max round 3", "最多 3 轮", "keep looping", or "until clean" is treated as explicit continuous mode.
+
+The skill resolves `max_loop` in this order:
 
 1. Current user instructions for the run.
 2. Repository config: `.codex/review-loop.config.md`.
 3. User Codex config: `${CODEX_HOME:-~/.codex}/review-loop.config.md`.
 4. Default: `10`.
 
-Both config files use simple `key: value` lines:
+The skill resolves `state_dir` in the same order, with default `auto`.
+
+Supported `state_dir` values:
+
+- `auto`: use repo `.codex` only if it already exists and is writable; otherwise use tmp.
+- `repo`: use repo `.codex` and create it if needed.
+- `tmp`: use `${TMPDIR:-/tmp}/codex-review-loop/<repo-id>`.
+- absolute path: use that path.
+
+Config files use simple `key: value` lines:
 
 ```yaml
 max_loop: 10
+state_dir: tmp
 ```
 
-Use the Codex config for your personal default across repos, and the repo config when a project needs a different cap.
+Use the Codex config for your personal default across repos, and the repo config when a project needs a different cap or state location.
 
 ## Prompt Overrides
 
-By default, the skill uses `references/default-prompts.md`. To customize the review or fix phases for a repository, create `.codex/review-loop.prompts.md` in that repository:
+By default, the skill uses `references/default-prompts.md`. To customize the review or fix phases, create `review-loop.prompts.md` in the resolved state directory or `.codex/review-loop.prompts.md` in the repository:
 
 ```markdown
 # Review Prompt
@@ -70,7 +83,7 @@ For repeated sessions, ask Codex to create or update an automation:
 Use $review-fix-loop to run one review/fix loop in this repository every hour until two consecutive CLEAN passes or max_loop is reached.
 ```
 
-The skill records state in `.codex/review-loop.md`, so later jobs can reuse the same loop branch and PR instead of starting over.
+The skill records state in the resolved `review-loop.md`, so later jobs can reuse the same loop branch and PR instead of starting over. With `state_dir: tmp`, the target repo does not need `.codex`.
 
 ## License
 

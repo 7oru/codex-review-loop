@@ -25,6 +25,24 @@ Use $review-fix-loop to run one review/fix loop in this repository.
 - Commits fixes after tests pass.
 - Supports continuous mode through Codex automations instead of an in-session infinite loop.
 - Supports custom review and fix prompt overrides per repository.
+- Supports configurable max loop counts from user-level and repo-level config.
+
+## Configuration
+
+The continuous loop stops after `max_loop` total passes. The skill resolves `max_loop` in this order:
+
+1. Current user instructions for the run.
+2. Repository config: `.codex/review-loop.config.md`.
+3. User Codex config: `${CODEX_HOME:-~/.codex}/review-loop.config.md`.
+4. Default: `10`.
+
+Both config files use simple `key: value` lines:
+
+```yaml
+max_loop: 10
+```
+
+Use the Codex config for your personal default across repos, and the repo config when a project needs a different cap.
 
 ## Prompt Overrides
 
@@ -49,7 +67,7 @@ Prompt overrides can tune scope, output shape, and project-specific constraints.
 For repeated sessions, ask Codex to create or update an automation:
 
 ```text
-Use $review-fix-loop to run one review/fix loop in this repository every hour until two consecutive CLEAN passes.
+Use $review-fix-loop to run one review/fix loop in this repository every hour until two consecutive CLEAN passes or max_loop is reached.
 ```
 
 The skill records state in `.codex/review-loop.md`, so later jobs can reuse the same loop branch and PR instead of starting over.

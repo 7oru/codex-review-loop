@@ -1,6 +1,6 @@
 ---
 name: review-fix-loop
-description: Use when the user asks to run one repository review/fix loop, one review-fix pass, continue or automate repeated review/fix sessions, or customize review and fix prompts for P0/P1 repo review and repair passes. Provides a single-pass workflow, durable loop state, branch/commit/PR lifecycle guidance, continuous automation guidance, and prompt override support.
+description: Use when the user asks to run one repository review/fix loop, one review-fix pass, continue or automate repeated review/fix sessions, customize review and fix prompts, or configure max loop counts for P0/P1 repo review and repair passes. Provides a single-pass workflow, durable loop state, branch/commit/PR lifecycle guidance, continuous automation guidance, prompt override support, and max-loop configuration.
 ---
 
 # Review/Fix Loop
@@ -32,8 +32,30 @@ After the pass, update `.codex/review-loop.md` with:
 - regression test added or updated, if any
 - test commands and results
 - prompt sources used for review and fix
+- max loop value and source used in continuous mode
 - commit hash, when a fix was made
 - consecutive clean count, when the outcome is `CLEAN`
+
+## Configuration
+
+Resolve configuration before each pass. Current user instructions override files.
+
+Use this precedence for `max_loop`:
+
+1. Current user instructions for this run.
+2. Repository file `.codex/review-loop.config.md`.
+3. User Codex file `${CODEX_HOME:-~/.codex}/review-loop.config.md`.
+4. Default value `10`.
+
+Configuration files are optional. Read simple `key: value` lines from the file:
+
+```yaml
+max_loop: 10
+```
+
+`max_loop` must be a positive integer. If a configured value is invalid or ambiguous, record `BLOCKED`, explain the invalid source, and ask the user to correct it.
+
+In continuous mode, stop or pause the automation when `.codex/review-loop.md` shows total loop passes greater than or equal to the resolved `max_loop`. Record the resolved value and source in `.codex/review-loop.md`.
 
 ## Prompt Overrides
 
@@ -127,8 +149,9 @@ Recommended automation behavior:
 - Run one review/fix pass per automation job.
 - Reuse this skill's normal workflow inside each job.
 - Use `.codex/review-loop.md` as the durable state between jobs.
+- Re-resolve `max_loop` at the start of every job.
 - Re-resolve prompt overrides at the start of every job.
-- Stop or pause the automation after 10 total loop passes, unless the user explicitly sets a different maximum.
+- Stop or pause the automation after the resolved `max_loop` total passes.
 - Stop or pause the automation after two consecutive `CLEAN` outcomes with passing tests.
 - If a fix is made, the next job should start from the updated repository state and loop log.
 - If a PR already exists in `.codex/review-loop.md`, continue committing to that PR branch.
@@ -137,7 +160,7 @@ Recommended automation behavior:
 If Codex automation tools are available, create or update a recurring automation for the current repository with a prompt equivalent to:
 
 ```text
-Use $review-fix-loop to run one review/fix loop in this repository. In continuous mode, commit every fix. On the first fix, create a branch from the latest main, push it, and open one PR; on later fixes, commit to the same PR branch recorded in `.codex/review-loop.md`. Resolve review and fix prompts from the current user request, then `.codex/review-loop.prompts.md`, then the skill defaults. If `.codex/review-loop.md` shows 10 total loop passes, pause this automation and report that the max loop count was reached. If `.codex/review-loop.md` shows two consecutive CLEAN outcomes with passing tests, pause this automation and report that the loop has converged. If a BLOCKED outcome is recorded, pause and report the blocker.
+Use $review-fix-loop to run one review/fix loop in this repository. In continuous mode, commit every fix. On the first fix, create a branch from the latest main, push it, and open one PR; on later fixes, commit to the same PR branch recorded in `.codex/review-loop.md`. Resolve max_loop from the current user request, then `.codex/review-loop.config.md`, then `${CODEX_HOME:-~/.codex}/review-loop.config.md`, then default 10. Resolve review and fix prompts from the current user request, then `.codex/review-loop.prompts.md`, then the skill defaults. If `.codex/review-loop.md` shows total loop passes greater than or equal to max_loop, pause this automation and report that the max loop count was reached. If `.codex/review-loop.md` shows two consecutive CLEAN outcomes with passing tests, pause this automation and report that the loop has converged. If a BLOCKED outcome is recorded, pause and report the blocker.
 ```
 
 If automation tools are unavailable, explain that the skill can still be triggered manually in each fresh session with:
@@ -153,6 +176,7 @@ In the final response, include:
 - outcome: `CLEAN`, `FIXED`, or `BLOCKED`
 - concise finding/fix summary
 - tests run and result
+- max loop value and source used in continuous mode
 - prompt override sources used
 - path to `.codex/review-loop.md`
 

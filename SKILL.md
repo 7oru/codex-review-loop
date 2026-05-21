@@ -7,6 +7,8 @@ description: Use when the user asks to run one repository review/fix loop, one r
 
 Run exactly one review/fix pass for the current repository unless the user explicitly asks to start continuous mode. Treat any user request for `max_loop`, `max round`, `max rounds`, or "最多 N 轮" with a value greater than 1, repeated sessions, an automation, an interval, or "until clean" as explicit continuous mode. A clean pass is valid when no real P0/P1 issue exists.
 
+In continuous mode, prefer Codex automation by default. Do not run multiple passes inside the current session unless the user explicitly asks to "run now", "run in this session", or equivalent.
+
 ## State File
 
 Resolve the loop state directory before reading or writing state. Do not require the target repository to contain `.codex`.
@@ -67,6 +69,8 @@ Read simple `key: value` lines from config files:
 ```yaml
 max_loop: 10
 state_dir: tmp
+continuous_mode: automation
+automation_cadence: hourly
 ```
 
 Use this precedence for `max_loop`:
@@ -83,9 +87,18 @@ Use this precedence for `state_dir`:
 3. User Codex file `${CODEX_HOME:-~/.codex}/review-loop.config.md`.
 4. Default value `auto`.
 
+Use this precedence for `continuous_mode` and `automation_cadence`:
+
+1. Current user instructions for this run.
+2. Repository file `.codex/review-loop.config.md`.
+3. User Codex file `${CODEX_HOME:-~/.codex}/review-loop.config.md`.
+4. Default values `continuous_mode: automation` and `automation_cadence: hourly`.
+
 `max_loop` must be a positive integer. If a configured value is invalid or ambiguous, record `BLOCKED`, explain the invalid source, and ask the user to correct it.
 
 `state_dir` must be `auto`, `repo`, `tmp`, or an absolute path. If it is invalid or cannot be created/written, fall back to tmp for `auto`; otherwise record `BLOCKED` and explain the invalid source.
+
+`continuous_mode` must be `automation` or `current-session`. Use `automation` unless the user explicitly asks to run multiple passes immediately in the current session. `automation_cadence` is a human-readable supported cadence such as `hourly`, `daily`, or a user-provided schedule; if the user gives no cadence, use `hourly`.
 
 In continuous mode, stop or pause the automation when `review-loop.md` shows total loop passes greater than or equal to the resolved `max_loop`. Record the resolved value and source in `review-loop.md`.
 
@@ -175,16 +188,26 @@ Do not inflate P2/P3 issues into P1 to produce findings. Do not report speculati
 
 Use this section when the user explicitly asks to keep looping, create new sessions, run repeatedly, continue until clean, start an automation, or provides a max loop/max round count greater than 1.
 
-Do not implement continuous mode as an infinite loop inside the current session. If the user asks for long-running or repeated work, directly create or update a Codex automation when automation tools are available. If the user explicitly asks to run multiple passes now, run at most the resolved `max_loop` passes and stop early on `CLEAN`, `BLOCKED`, or failing tests.
+Do not implement continuous mode as an infinite loop inside the current session.
+
+Default continuous behavior:
+
+- If automation tools are available and `continuous_mode: automation`, create or update a Codex automation immediately. Do this for max loop/max round requests even when the user did not say the word "automation".
+- If the user did not provide a cadence, use `automation_cadence`; if that is also missing, use an hourly cadence.
+- Do not start running the review/fix loop in the current session after creating the automation unless the user explicitly asked for an immediate first pass too.
+- If `continuous_mode: current-session`, or the user explicitly asks to run multiple passes now, run at most the resolved `max_loop` passes and stop early on `CLEAN`, `BLOCKED`, or failing tests.
+- If automation tools are unavailable and the user did not ask for current-session execution, explain that continuous mode needs automation support and provide the manual fresh-session prompt.
 
 Recommended automation behavior:
 
 - Run one review/fix pass per automation job.
+- Each automation job should be a fresh standalone review/fix pass, not a continuation of the current chat.
 - Reuse this skill's normal workflow inside each job.
 - Use the resolved `review-loop.md` as the durable state between jobs.
 - Prefer a tmp state directory when configured; do not create repository `.codex` unless `state_dir: repo` or the user asks for repo-local state.
 - Re-resolve `max_loop` at the start of every job.
 - Re-resolve `state_dir` at the start of every job.
+- Re-resolve `continuous_mode` and `automation_cadence` at the start of every job.
 - Re-resolve prompt overrides at the start of every job.
 - Stop or pause the automation after the resolved `max_loop` total passes.
 - Stop or pause the automation after two consecutive `CLEAN` outcomes with passing tests.
@@ -195,7 +218,7 @@ Recommended automation behavior:
 If Codex automation tools are available, create or update a recurring automation for the current repository with a prompt equivalent to:
 
 ```text
-Use $review-fix-loop to run one review/fix loop in this repository. In continuous mode, commit every fix. On the first fix, create a branch from the latest main, push it, and open one PR; on later fixes, commit to the same PR branch recorded in the resolved `review-loop.md`. Resolve state_dir from the current user request, then `.codex/review-loop.config.md`, then `${CODEX_HOME:-~/.codex}/review-loop.config.md`, then default auto; if state_dir is tmp, do not create repo-local `.codex`. Resolve max_loop from the current user request, then `.codex/review-loop.config.md`, then `${CODEX_HOME:-~/.codex}/review-loop.config.md`, then default 10. Resolve review and fix prompts from the current user request, then the resolved state directory `review-loop.prompts.md`, then `.codex/review-loop.prompts.md`, then the skill defaults. If `review-loop.md` shows total loop passes greater than or equal to max_loop, pause this automation and report that the max loop count was reached. If `review-loop.md` shows two consecutive CLEAN outcomes with passing tests, pause this automation and report that the loop has converged. If a BLOCKED outcome is recorded, pause and report the blocker.
+Use $review-fix-loop to run one review/fix loop in this repository. This automation job is one fresh standalone pass. In continuous mode, commit every fix. On the first fix, create a branch from the latest main, push it, and open one PR; on later fixes, commit to the same PR branch recorded in the resolved `review-loop.md`. Resolve state_dir from the current user request, then `.codex/review-loop.config.md`, then `${CODEX_HOME:-~/.codex}/review-loop.config.md`, then default auto; if state_dir is tmp, do not create repo-local `.codex`. Resolve max_loop from the current user request, then `.codex/review-loop.config.md`, then `${CODEX_HOME:-~/.codex}/review-loop.config.md`, then default 10. Resolve review and fix prompts from the current user request, then the resolved state directory `review-loop.prompts.md`, then `.codex/review-loop.prompts.md`, then the skill defaults. If `review-loop.md` shows total loop passes greater than or equal to max_loop, pause this automation and report that the max loop count was reached. If `review-loop.md` shows two consecutive CLEAN outcomes with passing tests, pause this automation and report that the loop has converged. If a BLOCKED outcome is recorded, pause and report the blocker.
 ```
 
 If automation tools are unavailable, explain that the skill can still be triggered manually in each fresh session with:
@@ -212,6 +235,7 @@ In the final response, include:
 - concise finding/fix summary
 - tests run and result
 - max loop value and source used in continuous mode
+- continuous mode and cadence used
 - state directory used
 - prompt override sources used
 - path to `review-loop.md`

@@ -32,6 +32,8 @@ Use $review-fix-loop to run one review/fix loop in this repository.
 
 The continuous loop stops after `max_loop` total passes. A request like "max loop 3", "max round 3", "最多 3 轮", "keep looping", or "until clean" is treated as explicit continuous mode.
 
+Continuous mode defaults to Codex automation, so each pass should run as a fresh automation job. It only runs multiple passes inside the current chat when you explicitly ask for current-session execution.
+
 The skill resolves `max_loop` in this order:
 
 1. Current user instructions for the run.
@@ -53,6 +55,8 @@ Config files use simple `key: value` lines:
 ```yaml
 max_loop: 10
 state_dir: tmp
+continuous_mode: automation
+automation_cadence: hourly
 ```
 
 Use the Codex config for your personal default across repos, and the repo config when a project needs a different cap or state location.
@@ -82,6 +86,14 @@ For repeated sessions, ask Codex to create or update an automation:
 ```text
 Use $review-fix-loop to run one review/fix loop in this repository every hour until two consecutive CLEAN passes or max_loop is reached.
 ```
+
+Or simply provide a max round count:
+
+```text
+Use $review-fix-loop with max round 3.
+```
+
+With the default config, that should create or update an hourly automation instead of running three passes in the current chat.
 
 The skill records state in the resolved `review-loop.md`, so later jobs can reuse the same loop branch and PR instead of starting over. With `state_dir: tmp`, the target repo does not need `.codex`.
 

@@ -8,6 +8,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 from typing import Optional
@@ -30,6 +31,18 @@ def repo_id(repo: Path) -> str:
 def default_state_dir(repo: Path) -> Path:
     root = Path(os.environ.get("TMPDIR") or "/tmp")
     return root / "codex-review-loop" / repo_id(repo)
+
+
+def default_codex_bin() -> str:
+    env_path = os.environ.get("CODEX_BIN")
+    if env_path:
+        return env_path
+
+    app_bundle = Path("/Applications/Codex.app/Contents/Resources/codex")
+    if app_bundle.exists() and os.access(app_bundle, os.X_OK):
+        return str(app_bundle)
+
+    return shutil.which("codex") or "codex"
 
 
 def run_codex(
@@ -85,7 +98,11 @@ def main() -> int:
     parser.add_argument("--review-prompt", required=True, help="Review prompt override.")
     parser.add_argument("--fix-prompt", default="", help="Fix prompt override.")
     parser.add_argument("--state-dir", help="State directory. Defaults to tmp.")
-    parser.add_argument("--codex-bin", default="codex", help="Codex executable.")
+    parser.add_argument(
+        "--codex-bin",
+        default=default_codex_bin(),
+        help="Codex executable. Defaults to CODEX_BIN, then the Codex.app bundled binary, then PATH.",
+    )
     parser.add_argument("--model", help="Model to pass to codex exec.")
     parser.add_argument("--ask-for-approval", default="on-request", help="Approval policy.")
     parser.add_argument("--sandbox", default="workspace-write", help="Sandbox mode.")

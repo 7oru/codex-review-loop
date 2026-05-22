@@ -96,6 +96,8 @@ python3 ~/.codex/skills/review-fix-loop/scripts/run_codex_pair_loop.py \
   --review-prompt "review repo，看是否能满足大部分用户的本地一键使用"
 ```
 
+On macOS the runner prefers `/Applications/Codex.app/Contents/Resources/codex` over the npm wrapper, because the npm wrapper can resolve differently from tmp state directories. Override with `CODEX_BIN` or `--codex-bin` when needed.
+
 Or ask Codex:
 
 ```text

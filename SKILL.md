@@ -212,6 +212,7 @@ Paired sessions behavior:
 - `max_loop` / max round counts rounds, so `max round 3` means at most 6 separate Codex exec sessions.
 - Stop early when a review session reports `CLEAN`, when any phase reports `BLOCKED`, or when tests fail.
 - Use `scripts/run_codex_pair_loop.py` from this skill directory when available.
+- On macOS, the runner should prefer `/Applications/Codex.app/Contents/Resources/codex` over the npm wrapper because PATH can resolve differently from tmp directories.
 - The review session must not edit repository files or fix issues; it writes the selected finding to the resolved state directory.
 - The fix session reads the previous review output, fixes only that selected issue, adds or updates regression tests, runs tests, commits, and updates state.
 

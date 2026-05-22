@@ -1,7 +1,7 @@
 interface:
   display_name: "Review/Fix Loop"
   short_description: "Run one repo review and fix pass"
-  default_prompt: "Use $review-fix-loop to run one review/fix loop in this repository. If I ask for max loops or automation without a cadence, do not invent hourly; ask for cadence. Respect max_loop, state_dir, continuous_mode, cadence, and prompt overrides."
+  default_prompt: "Use $review-fix-loop to run one review/fix loop in this repository. If I ask for max rounds, run paired review/fix codex exec sessions by default. Use automation only when I explicitly ask for a schedule. Respect max_loop, state_dir, continuous_mode, session_runner, cadence, and prompt overrides."
 
 policy:
   allow_implicit_invocation: true

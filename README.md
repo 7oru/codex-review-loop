@@ -2,6 +2,8 @@
 
 A Codex skill for running repository review/fix passes. It reviews for real P0/P1 issues, fixes one highest-severity issue when found, adds a regression test, commits the fix, and records durable loop state either in the repo or in tmp.
 
+For `max round N`, the default mode is paired sessions: each round runs a fresh review-only `codex exec` session, then a fresh fix-only `codex exec` session if the review found an actionable issue.
+
 ## Install
 
 Clone this repository into your Codex skills directory:
@@ -23,16 +25,17 @@ Use $review-fix-loop to run one review/fix loop in this repository.
 - Gates actionable findings to real P0/P1 issues only.
 - Tracks loop history in the resolved `review-loop.md`.
 - Commits fixes after tests pass.
-- Supports continuous mode through Codex automations instead of an in-session infinite loop.
+- Supports paired review/fix sessions through `codex exec`.
+- Supports explicit Codex automations when the user asks for a schedule.
 - Supports custom review and fix prompt overrides per repository.
 - Supports configurable max loop counts from user-level and repo-level config.
 - Supports tmp-backed loop state so target repos do not need an internal `.codex` directory.
 
 ## Configuration
 
-The continuous loop stops after `max_loop` total passes. A request like "max loop 3", "max round 3", "最多 3 轮", "keep looping", or "until clean" is treated as explicit continuous mode.
+The continuous loop stops after `max_loop` total rounds. A request like "max loop 3", "max round 3", "最多 3 轮", "keep looping", or "until clean" is treated as continuous mode.
 
-Continuous mode defaults to Codex automation, so each pass should run as a fresh automation job. It only runs multiple passes inside the current chat when you explicitly ask for current-session execution.
+Continuous mode defaults to paired sessions, not app automation and not current-chat looping. `max round 3` means up to 3 review sessions and up to 3 fix sessions.
 
 `max_loop` is only the cap. It is not a cadence. With the default config, `max round 3` alone should not create an hourly job.
 
@@ -57,7 +60,8 @@ Config files use simple `key: value` lines:
 ```yaml
 max_loop: 10
 state_dir: tmp
-continuous_mode: automation
+continuous_mode: pair-sessions
+session_runner: codex-exec
 automation_cadence: require-explicit
 ```
 
@@ -83,19 +87,22 @@ Prompt overrides can tune scope, output shape, and project-specific constraints.
 
 ## Continuous Mode
 
-For repeated sessions, ask Codex to create or update an automation:
+For paired sessions, run:
 
-```text
-Use $review-fix-loop to run one review/fix loop in this repository every hour until two consecutive CLEAN passes or max_loop is reached.
+```bash
+python3 ~/.codex/skills/review-fix-loop/scripts/run_codex_pair_loop.py \
+  --repo /path/to/repo \
+  --max-rounds 3 \
+  --review-prompt "review repo，看是否能满足大部分用户的本地一键使用"
 ```
 
-Or simply provide a max round count:
+Or ask Codex:
 
 ```text
 Use $review-fix-loop with max round 3.
 ```
 
-With the default config, that should ask for a cadence instead of creating an hourly automation. To create an active hourly automation, say:
+With the default config, that should launch paired `codex exec` sessions. To create an active hourly automation instead, say:
 
 ```text
 Use $review-fix-loop with max round 3, hourly.

@@ -1,8 +1,10 @@
 # codex-review-loop
 
-A Codex skill for running repository review/fix passes. It reviews for real P0/P1 issues, fixes one highest-severity issue when found, adds a regression test, commits the fix, and records durable loop state either in the repo or in tmp.
+A Codex skill for running repository review/fix passes. It reviews for real P0/P1 issues, fixes the selected issue or selected batch when found, adds regression coverage, commits the fix, and records durable loop state either in the repo or in tmp.
 
-For `max round N`, the default mode is paired sessions: each round runs a fresh review-only `codex exec` session, then a fresh fix-only `codex exec` session if the review found an actionable issue.
+For strict traceability, `max round N` can run as paired sessions: each round runs a fresh review-only `codex exec` session, then a fresh fix-only `codex exec` session if the review found an actionable issue. For faster local use, the runner also has a batch mode that runs one review session to find up to N P0/P1 issues, then one fix session to repair the selected batch.
+
+The bundled runner keeps those child sessions lightweight by default: it uses concise phase prompts, runs `codex exec --ephemeral` when supported, and records only durable loop state in the resolved state directory. Use the full skill prompt profile only when you are debugging the skill itself.
 
 ## Install
 
@@ -26,6 +28,7 @@ Use $review-fix-loop to run one review/fix loop in this repository.
 - Tracks loop history in the resolved `review-loop.md`.
 - Commits fixes after tests pass.
 - Supports paired review/fix sessions through `codex exec`.
+- Supports batch runner mode for faster local max-loop passes.
 - Supports explicit Codex automations when the user asks for a schedule.
 - Supports custom review and fix prompt overrides per repository.
 - Supports configurable max loop counts from user-level and repo-level config.
@@ -87,16 +90,51 @@ Prompt overrides can tune scope, output shape, and project-specific constraints.
 
 ## Continuous Mode
 
-For paired sessions, run:
+For lightweight local runs, use batch mode:
 
 ```bash
 python3 ~/.codex/skills/review-fix-loop/scripts/run_codex_pair_loop.py \
   --repo /path/to/repo \
   --max-rounds 3 \
+  --runner-mode batch \
+  --test-profile focused \
+  --review-prompt "review only the local one-click install/run path"
+```
+
+This runs at most two child Codex sessions total: one review session that reports up to three actionable P0/P1 findings, and one fix session that repairs the safe coherent batch.
+
+For stricter per-round isolation, use paired mode:
+
+```bash
+python3 ~/.codex/skills/review-fix-loop/scripts/run_codex_pair_loop.py \
+  --repo /path/to/repo \
+  --max-rounds 3 \
+  --runner-mode paired \
   --review-prompt "review repo，看是否能满足大部分用户的本地一键使用"
 ```
 
 On macOS the runner prefers `/Applications/Codex.app/Contents/Resources/codex` over the npm wrapper, because the npm wrapper can resolve differently from tmp state directories. Override with `CODEX_BIN` or `--codex-bin` when needed.
+
+By default the runner:
+
+- uses `--prompt-profile light`, which avoids asking every child session to load the full `$review-fix-loop` skill;
+- passes `--ephemeral` to child `codex exec` sessions when the installed CLI supports it;
+- passes the approval policy at the top-level CLI position when required by newer Codex builds;
+- keeps `loop-context.md` as a warm summary so later paired rounds reuse the repo map, prior decisions, and useful test commands;
+- uses `--test-profile focused`, which asks fix sessions to run targeted tests first and broaden only when risk warrants it;
+- stores review/fix summaries and `review-loop.md` in tmp unless `--state-dir` or config chooses another location.
+
+If user-level config or plugin sync is causing noise in child sessions, add `--ignore-user-config` and pass `--model` explicitly when needed.
+
+For full-skill validation, add:
+
+```bash
+--prompt-profile skill
+```
+
+Add `--persist-sessions` only when you specifically need Codex's own child-session transcript for debugging.
+
+Use `--test-profile final-full` when you want focused tests after intermediate fixes and a broader validation only at the end. Use `--test-profile full` for CI-style quality gates where runtime matters less than exhaustive confirmation.
 
 Or ask Codex:
 

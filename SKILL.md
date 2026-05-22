@@ -1,15 +1,33 @@
 ---
 name: review-fix-loop
-description: Use when the user asks to run one repository review/fix loop, one review-fix pass, continue repeated review/fix sessions, run max rounds as separate review and fix sessions, customize review and fix prompts, configure max loop counts, configure automation cadence, or store loop state outside the repository for P0/P1 repo review and repair passes. Provides a single-pass workflow, paired review/fix Codex exec sessions, durable loop state, branch/commit/PR lifecycle guidance, explicit automation guidance, prompt override support, max-loop configuration, cadence configuration, and tmp state storage.
+description: Use when the user asks to run one repository review/fix loop, one review-fix pass, continue repeated review/fix sessions, run max rounds as separate review and fix sessions or a lightweight batch, customize review and fix prompts, configure max loop counts, configure automation cadence, or store loop state outside the repository for P0/P1 repo review and repair passes. Provides a single-pass workflow, paired and batch Codex exec runners, durable loop state, branch/commit/PR lifecycle guidance, explicit automation guidance, prompt override support, max-loop configuration, cadence configuration, and tmp state storage.
 ---
 
 # Review/Fix Loop
 
 Run exactly one review/fix pass for the current repository unless the user explicitly asks to start continuous mode. Treat any user request for `max_loop`, `max round`, `max rounds`, or "最多 N 轮" with a value greater than 1, repeated sessions, an automation, an interval, or "until clean" as continuous mode. A clean pass is valid when no real P0/P1 issue exists.
 
-In continuous mode without an explicit schedule, default to paired sessions: each round is a fresh review-only `codex exec` session followed by a fresh fix-only `codex exec` session if the review found an actionable issue. Therefore `max round 3` means at most 3 review sessions and at most 3 fix sessions.
+In continuous mode without an explicit schedule, use the bundled runner when available. For strict traceability, paired mode runs each round as a fresh review-only `codex exec` session followed by a fresh fix-only `codex exec` session if the review found an actionable issue. For lightweight local use, batch mode runs one review session that can report up to the requested max count of P0/P1 findings, then one fix session that repairs the safe coherent batch.
 
 `max_loop` is only a cap, not a schedule. Do not infer `hourly`, `daily`, or any other cadence from a max loop/max round value alone.
+
+## Harness Weight And Session Placement
+
+Keep runner sessions lightweight. The review and fix sessions are disposable worker sessions whose durable output is the resolved state directory, not the Codex session transcript.
+
+Recommended placement:
+
+- Store loop state in tmp by default, or in the repository only when `state_dir: repo` is configured.
+- Run child `codex exec` sessions as ephemeral when the CLI supports it, so they do not write persistent Codex session history.
+- Pass concise phase-specific instructions to child sessions by default. Do not ask each child to load `$review-fix-loop` unless debugging the skill itself or validating full-skill behavior.
+- Use runner batch mode when the user asks for lightweight, token-efficient, or local one-click review/fix over several findings.
+- Use paired mode when the user asks for strict per-round isolation, CI-style quality gates, or the old max-round semantics.
+- Keep warm summaries enabled so later paired rounds read `loop-context.md` instead of rediscovering the repo map from scratch.
+- Prefer focused tests after small fixes; use final-full or full validation only when the user asks for heavier confidence or the patch touches shared contracts.
+- If user-level config or plugin sync is causing permission/network noise, prefer an explicit lightweight runner option such as `--ignore-user-config` and pass `--model` explicitly when needed.
+- Keep only `review-loop.md`, optional prompt overrides, and per-round review/fix summaries in the state directory.
+
+This keeps the harness from spending tokens on reloading this full skill file on every child session and reduces permission failures caused by child sessions trying to write Codex's own session store. A parent Codex session may still need one-time approval to launch the Codex binary when the parent sandbox does not allow it.
 
 ## State File
 
@@ -205,6 +223,8 @@ Do not implement continuous mode as an infinite loop inside the current session.
 
 Use paired sessions mode for requests like `max round 3` unless the user also asks for a schedule or app automation.
 
+If the user specifically asks for a lightweight, faster, lower-token, or local one-click loop, use runner batch mode instead of paired mode. In batch mode, `max round 3` means one review session may report up to three actionable P0/P1 findings, followed by one fix session that fixes the safe coherent batch.
+
 Paired sessions behavior:
 
 - Run each review and fix phase in a separate `codex exec` session.
@@ -213,15 +233,28 @@ Paired sessions behavior:
 - Stop early when a review session reports `CLEAN`, when any phase reports `BLOCKED`, or when tests fail.
 - Use `scripts/run_codex_pair_loop.py` from this skill directory when available.
 - On macOS, the runner should prefer `/Applications/Codex.app/Contents/Resources/codex` over the npm wrapper because PATH can resolve differently from tmp directories.
+- The bundled runner defaults to lightweight prompts, warm summaries, focused test guidance, and ephemeral child sessions. Use `--prompt-profile skill` only when you specifically need each child session to load this skill.
 - The review session must not edit repository files or fix issues; it writes the selected finding to the resolved state directory.
 - The fix session reads the previous review output, fixes only that selected issue, adds or updates regression tests, runs tests, commits, and updates state.
 
-Run the bundled runner like:
+Run the bundled runner in lightweight batch mode like:
 
 ```bash
 python3 /path/to/review-fix-loop/scripts/run_codex_pair_loop.py \
   --repo /path/to/repo \
   --max-rounds 3 \
+  --runner-mode batch \
+  --test-profile focused \
+  --review-prompt "review only the local one-click install/run path"
+```
+
+Run the bundled runner in strict paired mode like:
+
+```bash
+python3 /path/to/review-fix-loop/scripts/run_codex_pair_loop.py \
+  --repo /path/to/repo \
+  --max-rounds 3 \
+  --runner-mode paired \
   --review-prompt "review repo，看是否能满足大部分用户的本地一键使用"
 ```
 
@@ -230,6 +263,8 @@ If the runner cannot be used, manually run the same sequence with `codex exec -C
 1. Review-only session for round N.
 2. Fix-only session for round N if review found an actionable issue.
 3. Repeat until `max_loop`, `CLEAN`, or `BLOCKED`.
+
+For manual fallback, use the same lightweight review-only and fix-only protocol as the runner. Avoid putting `Use $review-fix-loop` in every child prompt unless the purpose of the run is to test full skill loading.
 
 Default continuous behavior:
 

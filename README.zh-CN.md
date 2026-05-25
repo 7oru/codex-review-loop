@@ -16,8 +16,11 @@ Codex skill for P0/P1 repository review/fix loops with paired or batch codex exe
 
 - [这是什么](#what-it-is)
 - [什么时候用](#when-to-use-it)
+- [前置条件](#prerequisites)
 - [安装](#install)
+- [验证这个仓库](#verify-this-repo)
 - [常用用法](#common-usage)
+- [示例对话](#sample-transcript)
 - [Runner 模式](#runner-modes)
 - [配置](#configuration)
 - [自定义 Review/Fix 提示](#prompt-overrides)
@@ -58,6 +61,22 @@ Codex skill for P0/P1 repository review/fix loops with paired or batch codex exe
 
 [返回顶部](#top)
 
+<a id="prerequisites"></a>
+
+## 前置条件
+
+使用这个 skill 需要：
+
+- Codex App 或支持 `codex exec` 的 Codex CLI。
+- Git，因为 review/fix 会读取仓库状态，并在修复完成后提交 commit。
+
+如果要开发这个仓库，或直接运行自带 runner，还需要：
+
+- Python 3.10 或更新版本。
+- 当前测试不需要安装第三方 Python 包。
+
+[返回顶部](#top)
+
 <a id="install"></a>
 
 ## 安装
@@ -66,7 +85,16 @@ Codex skill for P0/P1 repository review/fix loops with paired or batch codex exe
 
 ```bash
 mkdir -p ~/.codex/skills
-git clone git@github.com:7oru/codex-review-loop.git ~/.codex/skills/review-fix-loop
+git clone https://github.com/7oru/codex-review-loop.git ~/.codex/skills/review-fix-loop
+```
+
+目录名建议保持为 `review-fix-loop`，这样提示词里的 skill 名才是 `$review-fix-loop`。
+
+如果你已经为了开发 clone 了这个仓库，也可以直接把当前 checkout 链接到 skills 目录：
+
+```bash
+mkdir -p ~/.codex/skills
+ln -s "$(pwd)" ~/.codex/skills/review-fix-loop
 ```
 
 然后开启一个新的 Codex 会话，在目标仓库里说：
@@ -74,6 +102,30 @@ git clone git@github.com:7oru/codex-review-loop.git ~/.codex/skills/review-fix-l
 ```text
 Use $review-fix-loop to run one review/fix loop in this repository.
 ```
+
+[返回顶部](#top)
+
+<a id="verify-this-repo"></a>
+
+## 验证这个仓库
+
+运行单元测试：
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+不启动真实 Codex 子会话，只 smoke-test runner：
+
+```bash
+python3 scripts/run_codex_pair_loop.py \
+  --repo . \
+  --max-rounds 1 \
+  --review-prompt "dry-run smoke test" \
+  --dry-run
+```
+
+`--dry-run` 只打印生成的 `codex exec` 命令，不会真的 review、修复或修改仓库。
 
 [返回顶部](#top)
 
@@ -103,6 +155,58 @@ Use $review-fix-loop with max round 3. Review only the local one-click install/r
 
 ```text
 Use $review-fix-loop with max round 3, hourly.
+```
+
+[返回顶部](#top)
+
+<a id="sample-transcript"></a>
+
+## 示例对话
+
+下面是一个模拟 transcript，用来展示真实 `max round 3` 跑起来时的轻量形态。具体措辞、命令、路径、文件名和 commit hash 会因仓库而不同。
+
+```text
+用户
+对这个 repo 跑 3 轮 review fix loop。
+
+Codex
+我会用 review-fix-loop skill 按它的流程跑：先让独立 review 只找
+P0/P1 问题，再按发现启动 fix 子会话修复和验证，三轮之间保留状态。
+我先读一下这个 repo 和 skill 的具体约定。
+
+状态：Explored 1 file 和 ran 2 commands。
+
+repo 现在在 main 上，工作区是干净的。"3 轮"是上限，不是定时任务，
+所以我会跑 paired review/fix 子会话，并在 CLEAN、BLOCKED 或测试失败时
+提前停止。状态目录解析为 tmp，所以目标仓库不需要有 .codex 目录。
+
+状态：Ran 3 commands。
+
+本地 CLI 的 flag 不完全匹配 bundled runner，所以我会按 skill fallback，
+用 codex exec 手动跑等价的独立 review/fix 子会话。第 1 轮 review 只读
+repo、不改代码，只报告真实 P0/P1 问题。
+
+状态：第 1 轮 review 正在运行。
+
+第 1 轮 review 找到一个 P1：重复 run_id 会覆盖 SFT 训练产物
+run/adapters。我现在启动第 1 轮 fix 子会话，只修这个问题，补回归测试，
+跑测试，通过后本地提交。
+
+状态：第 1 轮 fix 正在运行。
+
+fix 子会话确认工作区干净，修改 training.py，并补
+test_phase3_sft_training.py 的碰撞用例。修复会在真正写入 run/adapters
+前检查目录是否已存在，避免静默破坏旧产物。
+
+状态：测试通过，fix 已本地提交。
+
+第 2 轮 review 重新检查更新后的训练和评估路径，没有发现可执行 P0/P1。
+按规则记录 CLEAN 并提前结束；第 3 轮不会为了凑数继续消耗。
+
+结果
+Outcome: FIXED then CLEAN
+State: /var/folders/.../codex-review-loop/<repo-id>/review-loop.md
+Commit: abc1234 Fix run adapter collision protection
 ```
 
 [返回顶部](#top)

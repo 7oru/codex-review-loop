@@ -16,8 +16,11 @@ Codex skill for P0/P1 repository review/fix loops with paired or batch codex exe
 
 - [What It Is](#what-it-is)
 - [When To Use It](#when-to-use-it)
+- [Prerequisites](#prerequisites)
 - [Install](#install)
+- [Verify This Repo](#verify-this-repo)
 - [Common Usage](#common-usage)
+- [Sample Transcript](#sample-transcript)
 - [Runner Modes](#runner-modes)
 - [Configuration](#configuration)
 - [Prompt Overrides](#prompt-overrides)
@@ -56,6 +59,22 @@ Do not use it as a replacement for CI, broad style review, or P2/P3 backlog gene
 
 [Back to top](#top)
 
+<a id="prerequisites"></a>
+
+## Prerequisites
+
+To use the skill:
+
+- Codex App or Codex CLI with `codex exec` available.
+- Git, because review/fix passes inspect repository state and commit completed fixes.
+
+To work on this repository or run the bundled runner directly:
+
+- Python 3.10 or newer.
+- No third-party Python package install is required for the current tests.
+
+[Back to top](#top)
+
 <a id="install"></a>
 
 ## Install
@@ -64,7 +83,16 @@ Clone this repository into your Codex skills directory:
 
 ```bash
 mkdir -p ~/.codex/skills
-git clone git@github.com:7oru/codex-review-loop.git ~/.codex/skills/review-fix-loop
+git clone https://github.com/7oru/codex-review-loop.git ~/.codex/skills/review-fix-loop
+```
+
+The directory name should be `review-fix-loop`, matching the skill name used in prompts.
+
+If you already cloned this repository for development, symlink the checkout instead:
+
+```bash
+mkdir -p ~/.codex/skills
+ln -s "$(pwd)" ~/.codex/skills/review-fix-loop
 ```
 
 Start a new Codex session in your target repository and ask:
@@ -72,6 +100,30 @@ Start a new Codex session in your target repository and ask:
 ```text
 Use $review-fix-loop to run one review/fix loop in this repository.
 ```
+
+[Back to top](#top)
+
+<a id="verify-this-repo"></a>
+
+## Verify This Repo
+
+Run the unit tests:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+Smoke-test the runner without starting real child Codex sessions:
+
+```bash
+python3 scripts/run_codex_pair_loop.py \
+  --repo . \
+  --max-rounds 1 \
+  --review-prompt "dry-run smoke test" \
+  --dry-run
+```
+
+`--dry-run` prints the generated `codex exec` commands and exits without reviewing or editing the repository.
 
 [Back to top](#top)
 
@@ -101,6 +153,64 @@ If you want a scheduled automation, say the cadence explicitly. `max round 3` is
 
 ```text
 Use $review-fix-loop with max round 3, hourly.
+```
+
+[Back to top](#top)
+
+<a id="sample-transcript"></a>
+
+## Sample Transcript
+
+This mocked transcript shows the lightweight shape of a real `max round 3` run. Exact wording, commands, paths, filenames, and commit hashes vary by repository.
+
+```text
+User
+Run 3 rounds of review fix loop for this repo.
+
+Codex
+I will use the review-fix-loop skill for its workflow: an independent
+review looks only for P0/P1 issues, fix sessions repair and verify
+findings, and state is kept between rounds. I am reading the repo and
+the skill constraints first.
+
+Status: Explored 1 file and ran 2 commands.
+
+The repo is on main and the working tree is clean. "3 rounds" is a cap,
+not a schedule, so I will run paired review/fix child sessions and stop
+early on CLEAN, BLOCKED, or test failure. The resolved state directory is
+tmp, so the target repo does not need a .codex directory.
+
+Status: Ran 3 commands.
+
+The local CLI flags do not fully match the bundled runner, so I will use
+the skill fallback and launch equivalent independent review/fix child
+sessions with codex exec. Round 1 review is read-only and will only
+report a real P0/P1 issue.
+
+Status: Round 1 review running.
+
+Round 1 review found one P1: duplicate run_id values can overwrite SFT
+training artifacts in run/adapters. I am starting the round 1 fix
+session; it will only fix this issue, add regression coverage, run tests,
+and commit locally.
+
+Status: Round 1 fix running.
+
+The fix session confirmed a clean workspace, updated training.py, and
+added a collision regression test in test_phase3_sft_training.py. The
+fix checks for an existing run/adapters directory before writing new
+artifacts, so old outputs are not silently destroyed.
+
+Status: tests passed and fix committed.
+
+Round 2 review rechecked the updated training and evaluation paths and
+found no actionable P0/P1 issue. The loop recorded CLEAN and stopped
+early; round 3 was not spent just to exhaust the cap.
+
+Result
+Outcome: FIXED then CLEAN
+State: /var/folders/.../codex-review-loop/<repo-id>/review-loop.md
+Commit: abc1234 Fix run adapter collision protection
 ```
 
 [Back to top](#top)
